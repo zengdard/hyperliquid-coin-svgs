@@ -1,0 +1,42 @@
+{
+  "name": "hyperliquid-coin-svgs",
+  "version": "1.0.0",
+  "description": "Inline SVG icons for all HyperLiquid spot & perp assets — import directly in your app",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "assets.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "fetch": "npx tsx scripts/fetch-svgs.ts",
+    "fetch:live": "npx tsx scripts/fetch-svgs.ts --live",
+    "generate": "npx tsx scripts/fetch-svgs.ts",
+    "build": "tsc",
+    "prepublishOnly": "npm run fetch && npm run build"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/crypto-coin-svg.git"
+  },
+  "keywords": [
+    "crypto",
+    "svg",
+    "hyperliquid",
+    "coins",
+    "cryptocurrency"
+  ]
+}
