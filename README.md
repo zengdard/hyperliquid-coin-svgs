@@ -79,29 +79,6 @@ npm run fetch:live
 npm run build
 ```
 
-## Publishing to npm
-
-### 1. Get an npm token
-
-1. Go to [npmjs.com](https://www.npmjs.com) → **Access Tokens** → **Generate New Token** → **Automation** (read and publish).
-2. Copy the token (starts with `npm_`).
-
-### 2. Add the token to GitHub Secrets
-
-1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**.
-2. Click **New repository secret**.
-3. Name: `NPM_TOKEN`, value: paste your npm token.
-
-That's it — the weekly workflow will publish automatically.
-
-### Manual publish
-
-```sh
-npm run fetch:live
-npm run build
-npm publish
-```
-
 ## License
 
 MIT
