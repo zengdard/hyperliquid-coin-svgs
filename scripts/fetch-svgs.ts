@@ -6,7 +6,7 @@ const OUTPUT_DIR = "svgs";
 const ASSETS_FILE = "assets.json";
 const GENERATED_FILE = "src/_assets.ts";
 const CONCURRENCY = 3;
-const REQUEST_DELAY_MS = 150;
+const REQUEST_DELAY_MS = 3000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
