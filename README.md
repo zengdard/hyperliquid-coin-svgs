@@ -1,7 +1,13 @@
 # hyperliquid-coin-svgs
 
+[![npm version](https://img.shields.io/npm/v/hyperliquid-coin-svgs.svg)](https://www.npmjs.com/package/hyperliquid-coin-svgs)
+[![npm downloads](https://img.shields.io/npm/dm/hyperliquid-coin-svgs.svg)](https://www.npmjs.com/package/hyperliquid-coin-svgs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 SVG icons for all assets listed on [HyperLiquid](https://app.hyperliquid.xyz) (spot + perp).  
 The SVGs are **bundled directly** in the package — no network requests at runtime.
+
+📦 [View on npm](https://www.npmjs.com/package/hyperliquid-coin-svgs)
 
 ## Install
 
