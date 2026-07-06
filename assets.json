@@ -466,6 +466,8 @@
   "SPCXD",
   "MGW",
   "MAX",
+  "PRL",
+  "HNIL",
   "BTC",
   "ETH",
   "ATOM",
@@ -685,5 +687,6 @@
   "AXS",
   "DASH",
   "SKR",
-  "CHIP"
+  "CHIP",
+  "GRAM"
 ]
