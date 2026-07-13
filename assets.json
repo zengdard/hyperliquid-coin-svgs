@@ -468,6 +468,8 @@
   "MAX",
   "PRL",
   "HNIL",
+  "DRV",
+  "UANSEM",
   "BTC",
   "ETH",
   "ATOM",
@@ -688,5 +690,6 @@
   "DASH",
   "SKR",
   "CHIP",
-  "GRAM"
+  "GRAM",
+  "CASHCAT"
 ]
