@@ -1,6 +1,6 @@
 {
   "name": "hyperliquid-coin-svgs",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Inline SVG icons for all HyperLiquid spot & perp assets — import directly in your app",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
