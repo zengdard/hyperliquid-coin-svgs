@@ -492,6 +492,11 @@
   "RAIN",
   "EQMETA",
   "EQMSFT",
+  "ONE",
+  "EQAMZN",
+  "EQMU",
+  "SL",
+  "EQSPCX",
   "BTC",
   "ETH",
   "ATOM",
@@ -713,5 +718,6 @@
   "SKR",
   "CHIP",
   "GRAM",
-  "CASHCAT"
+  "CASHCAT",
+  "PONS"
 ]
