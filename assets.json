@@ -499,6 +499,7 @@
   "EQSPCX",
   "SODA",
   "SYN",
+  "RPC",
   "BTC",
   "ETH",
   "ATOM",
@@ -721,5 +722,6 @@
   "CHIP",
   "GRAM",
   "CASHCAT",
-  "PONS"
+  "PONS",
+  "USELESS"
 ]
