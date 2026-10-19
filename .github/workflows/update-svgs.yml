@@ -16,13 +16,15 @@ concurrency:
 
 jobs:
   # Fetch, verify and push the refreshed SVGs. This job never needs publish
-  # rights, so it always runs to completion even if npm is misconfigured.
+  # rights, and decides whether a release is even required — so the manual
+  # environment approval is only requested when something will be published.
   update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
-      changed: ${{ steps.diff.outputs.changed }}
+      publish: ${{ steps.gate.outputs.publish }}
+      bump: ${{ steps.gate.outputs.bump }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -41,6 +43,24 @@ jobs:
         run: |
           if ! git diff --quiet; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide whether to release
+        id: gate
+        run: |
+          LOCAL=$(node -p "require('./package.json').version")
+          if [ "${{ steps.diff.outputs.changed }}" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "bump=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.publish_unpublished }}" = "true" ] && \
+               ! npm view "hyperliquid-coin-svgs@$LOCAL" version >/dev/null 2>&1; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version $LOCAL is not on npm yet — publishing it as-is."
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            echo "No SVG changes and $LOCAL already published — nothing to do."
           fi
 
       - name: Build and test
@@ -62,7 +82,7 @@ jobs:
   # name, and the manual approval must not gate the 13-minute fetch above.
   publish:
     needs: update
-    if: always() && needs.update.result == 'success'
+    if: needs.update.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: npm-publish
@@ -77,7 +97,7 @@ jobs:
           fetch-depth: 0
 
       # Deliberately NO registry-url: setup-node would write an .npmrc that
-      # references NODE_AUTH_TOKEN, and npm prefers that token over OIDC.
+      # makes npm prefer a (possibly invalid) NODE_AUTH_TOKEN over OIDC.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -87,37 +107,22 @@ jobs:
 
       - run: npm ci
 
-      # Publish when the SVGs changed, or on demand when the current version has
-      # never been published (e.g. a release staged earlier and still pending).
-      - name: Decide whether to publish
-        id: gate
-        run: |
-          LOCAL=$(node -p "require('./package.json').version")
-          if [ "${{ needs.update.outputs.changed }}" = "true" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.publish_unpublished }}" = "true" ] && \
-               ! npm view "hyperliquid-coin-svgs@$LOCAL" version >/dev/null 2>&1; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Version $LOCAL is not on npm yet — publishing it."
-          else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "No SVG changes and $LOCAL already published or pending — nothing to do."
-          fi
-
       - name: Bump version
-        if: steps.gate.outputs.publish == 'true'
+        if: needs.update.outputs.bump == 'true'
         run: |
           npm version patch --no-git-tag-version
           echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
+      - name: Read version
+        if: needs.update.outputs.bump != 'true'
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
       # npm Trusted Publishing created after 2026-09-03 allows `npm stage
       # publish` by default; direct `npm publish` must be explicitly enabled on
-      # npmjs.com. Staging does not require 2FA — a maintainer approves later.
-      # Set the repository variable NPM_PUBLISH_MODE=direct once direct
-      # publishing is allowed.
+      # npmjs.com. Staging needs no 2FA — a maintainer approves afterwards.
+      # Set the repository variable NPM_PUBLISH_MODE=direct to skip the queue.
       - name: Publish to npm
         id: publish
-        if: steps.gate.outputs.publish == 'true'
         continue-on-error: true
         env:
           NPM_KEY: ${{ secrets.NPM_KEY }}
