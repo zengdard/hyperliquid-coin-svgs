@@ -5,18 +5,19 @@ name: Update SVGs
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  # Required by npm Trusted Publishing (OIDC).
-  id-token: write
-
 concurrency:
   group: update-svgs
   cancel-in-progress: false
 
 jobs:
+  # Fetch, verify and push the refreshed SVGs. This job never needs publish
+  # rights, so it always runs to completion even if npm is misconfigured.
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -25,10 +26,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          registry-url: "https://registry.npmjs.org"
-
-      # Trusted Publishing requires npm >= 11.5.1.
-      - run: npm install -g npm@latest
 
       - run: npm ci
 
@@ -47,35 +44,56 @@ jobs:
           npm run build
           npm test
 
-      - name: Commit SVG updates
+      - name: Commit and push SVG updates
         if: steps.diff.outputs.changed == 'true'
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
           git commit -m "chore: update SVGs [skip ci]"
+          git push origin main
 
-      # Push the refreshed SVGs before publishing. Publishing depends on
-      # credentials we do not control, and it must not prevent the repo from
-      # staying up to date (that is what created the orphan v1.0.x tags before).
-      - name: Push SVG updates
-        if: steps.diff.outputs.changed == 'true'
-        run: git push origin main
+  # Publish only when the SVG payload actually changed. Declaring an
+  # `environment` here lets npm Trusted Publishing require a manual approval
+  # for releases without gating the 13-minute fetch job above.
+  publish:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/hyperliquid-coin-svgs
+    permissions:
+      contents: write
+      # Required by npm Trusted Publishing (OIDC).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
 
       - name: Bump version
-        if: steps.diff.outputs.changed == 'true'
         run: |
           npm version patch --no-git-tag-version
           echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
+      # A valid NPM_KEY wins; otherwise use OIDC trusted publishing.
       - name: Publish to npm
         id: publish
-        if: steps.diff.outputs.changed == 'true'
         continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_KEY }}
         run: |
-          # A valid NPM_KEY wins; otherwise fall back to OIDC trusted publishing.
           if [ -n "$NODE_AUTH_TOKEN" ] && npm whoami >/dev/null 2>&1; then
             npm publish
           else
@@ -94,10 +112,14 @@ jobs:
       - name: Warn when publishing is unavailable
         if: steps.publish.outcome == 'failure'
         run: |
-          echo "::warning title=npm publish skipped::The package was updated and pushed, but npm refused the publication (404/401). Configure npm Trusted Publishing for this repository/workflow on npmjs.com, or replace the NPM_KEY secret with a token from an account that maintains hyperliquid-coin-svgs."
+          echo "::warning title=npm publish skipped::npm refused the publication (404/401). Check the Trusted Publisher config for this repository (workflow update-svgs.yml, environment npm-publish), or replace the NPM_KEY secret with a token from an account that maintains hyperliquid-coin-svgs."
           {
             echo "### npm publish skipped"
             echo ""
-            echo "The SVG update was committed and pushed, but publishing failed."
-            echo "Fix: add this repo as a Trusted Publisher on npmjs.com, or set a valid \`NPM_KEY\` secret."
+            echo "The SVG update was pushed, but publishing failed."
+            echo ""
+            echo "Check that npmjs.com lists this Trusted Publisher:"
+            echo "- Repository: \`zengdard/hyperliquid-coin-svgs\`"
+            echo "- Workflow: \`update-svgs.yml\`"
+            echo "- Environment: \`npm-publish\`"
           } >> "$GITHUB_STEP_SUMMARY"
