@@ -17,33 +17,85 @@ npm install hyperliquid-coin-svgs
 
 ## Usage
 
+The package is split into entry points so you only pay for what you import.
+The default entry contains **no SVG data** (a few KB).
+
+### One icon (recommended)
+
 ```ts
-import { getAssetImage, getAssetSvg, assets, svgMap } from "hyperliquid-coin-svgs";
+import BTC from "hyperliquid-coin-svgs/BTC";
+// or
+import SOL from "hyperliquid-coin-svgs/SOL";
 
-// URL to the SVG on HyperLiquid's CDN (no dependency needed)
-getAssetImage("BTC");   // "https://app.hyperliquid.xyz/coins/BTC.svg"
-getAssetImage("eth");   // lowercase also works
-
-// SVG content as a string (bundled in the package)
-getAssetSvg("BTC");     // '<svg xmlns="..." viewBox="0 0 ...">...</svg>'
-getAssetSvg("SOL");     // '<svg width="56" height="56"...'
-
-// List all available assets (231 coins have SVGs)
-console.log(assets);    // ["BTC", "ETH", "SOL", "HYPE", ...]
-
-// Raw map if you prefer
-svgMap["BTC"];          // same as getAssetSvg("BTC")
+element.innerHTML = BTC;
 ```
+
+Each asset is its own module (~1–3 KB), so bundlers include only the icons you
+actually import. Asset names are the HyperLiquid symbols, case-sensitive:
+`BTC`, `ETH`, `HYPE`, `kPEPE`, `USDC`, `0G`, …
+
+### Several icons, loaded on demand
+
+```ts
+import { loadAsset } from "hyperliquid-coin-svgs/lazy";
+
+const svg = await loadAsset("BTC"); // string | undefined
+```
+
+The ESM build uses real dynamic `import()` calls, so bundlers can code-split
+one chunk per icon: the entry stays ~20 KB and only the requested icon is
+fetched.
+
+### CDN URL only (zero payload)
+
+```ts
+import { getAssetImage } from "hyperliquid-coin-svgs";
+
+getAssetImage("BTC"); // "https://app.hyperliquid.xyz/coins/BTC.svg"
+```
+
+### Dynamic lookup by name (heavy, opt-in)
+
+If you need to resolve *any* asset from a runtime string, import the full map.
+This pulls every SVG into your bundle — prefer the options above when possible.
+
+```ts
+import { getAssetSvg, svgMap } from "hyperliquid-coin-svgs/svgMap";
+
+getAssetSvg("BTC");  // string | undefined (case-insensitive)
+svgMap["ETH"];       // raw map
+```
+
+### Listing available assets
+
+```ts
+import { assets, hasAsset } from "hyperliquid-coin-svgs";
+
+assets;          // ["USDC", "PURR", "BTC", ...]
+hasAsset("btc"); // true (case-insensitive)
+```
+
+## API
+
+| Entry point | Export | Returns | Payload |
+|---|---|---|---|
+| `hyperliquid-coin-svgs` | `getAssetImage(asset)` | `string` (CDN URL) | none |
+| `hyperliquid-coin-svgs` | `assets` | `readonly string[]` | ~4 KB |
+| `hyperliquid-coin-svgs` | `hasAsset(asset)` | `boolean` | none |
+| `hyperliquid-coin-svgs/lazy` | `loadAsset(asset)` | `Promise<string \| undefined>` | one icon |
+| `hyperliquid-coin-svgs/<ASSET>` | default export | `string` (SVG) | one icon |
+| `hyperliquid-coin-svgs/svgMap` | `getAssetSvg(asset)` | `string \| undefined` | all icons |
+| `hyperliquid-coin-svgs/svgMap` | `svgMap` | `Record<string, string>` | all icons |
+
+All entry points work with both `import` and `require`.
 
 ### React example
 
 ```tsx
-import { getAssetSvg } from "hyperliquid-coin-svgs";
+import BTC from "hyperliquid-coin-svgs/BTC";
 
-function CoinIcon({ asset }: { asset: string }) {
-  const svg = getAssetSvg(asset);
-  if (!svg) return null;
-  return <span dangerouslySetInnerHTML={{ __html: svg }} />;
+function CoinIcon() {
+  return <span dangerouslySetInnerHTML={{ __html: BTC }} />;
 }
 ```
 
@@ -51,27 +103,33 @@ function CoinIcon({ asset }: { asset: string }) {
 
 ```vue
 <template>
-  <span v-html="getAssetSvg(asset)" />
+  <span v-html="btc" />
 </template>
 
 <script setup>
-import { getAssetSvg } from "hyperliquid-coin-svgs";
-defineProps({ asset: String });
+import btc from "hyperliquid-coin-svgs/BTC";
 </script>
 ```
 
-## API
+## Migrating from v1
 
-| Function | Returns | Description |
-|---|---|---|
-| `getAssetImage(asset)` | `string` | CDN URL of the SVG |
-| `getAssetSvg(asset)` | `string \| undefined` | Inline SVG content |
-| `assets` | `readonly string[]` | All assets with available SVGs |
-| `svgMap` | `Record<string, string>` | Raw asset → SVG map |
+v1 exported a single `getAssetSvg` / `svgMap` pair from the root, which pulled
+every SVG (~14 MB) into any bundle that imported anything.
+
+| v1 | v2 |
+|---|---|
+| `getAssetSvg("BTC")` | `import BTC from "hyperliquid-coin-svgs/BTC"` or `getAssetSvg` from `hyperliquid-coin-svgs/svgMap` |
+| `svgMap` | `svgMap` from `hyperliquid-coin-svgs/svgMap` |
+| `getAssetImage("BTC")` | unchanged (root) |
+| `assets` | unchanged (root) |
 
 ## How it works
 
-The package uses HyperLiquid's public API to fetch the list of all spot and perpetual assets, downloads the SVGs from `https://app.hyperliquid.xyz/coins/<ASSET>.svg`, and bundles them into a TypeScript source file at build time. No network requests happen when you import the package in your app.
+The package uses HyperLiquid's public API to fetch the list of all spot and
+perpetual assets, downloads the SVGs from
+`https://app.hyperliquid.xyz/coins/<ASSET>.svg`, minifies them with SVGO, and
+generates one TypeScript module per asset at build time. No network requests
+happen when you import the package in your app.
 
 The SVGs are auto-updated weekly via GitHub Actions (every Monday 06:00 UTC).
 
@@ -81,8 +139,11 @@ The SVGs are auto-updated weekly via GitHub Actions (every Monday 06:00 UTC).
 # Fetch the latest asset list from HyperLiquid and re-download all SVGs
 npm run fetch:live
 
-# Rebuild the package
-npm run build
+# Regenerate sources from the SVGs already on disk (no network)
+npm run regenerate
+
+# Build and verify both CJS and ESM entry points
+npm run build && npm test
 ```
 
 ## License
