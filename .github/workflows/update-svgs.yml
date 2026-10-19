@@ -4,6 +4,11 @@ name: Update SVGs
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
+    inputs:
+      publish_unpublished:
+        description: "Also publish when the current version is not on npm"
+        type: boolean
+        default: false
 
 concurrency:
   group: update-svgs
@@ -82,62 +87,89 @@ jobs:
 
       - run: npm ci
 
-      # Publish when the SVGs changed, or when the local version has never been
-      # published (catches versions committed while publishing was broken).
+      # Publish when the SVGs changed, or on demand when the current version has
+      # never been published (e.g. a release staged earlier and still pending).
       - name: Decide whether to publish
         id: gate
         run: |
           LOCAL=$(node -p "require('./package.json').version")
           if [ "${{ needs.update.outputs.changed }}" = "true" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
-          elif ! npm view "hyperliquid-coin-svgs@$LOCAL" version >/dev/null 2>&1; then
+          elif [ "${{ inputs.publish_unpublished }}" = "true" ] && \
+               ! npm view "hyperliquid-coin-svgs@$LOCAL" version >/dev/null 2>&1; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Version $LOCAL is not on npm yet — publishing it."
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "No SVG changes and $LOCAL is already published — nothing to do."
+            echo "No SVG changes and $LOCAL already published or pending — nothing to do."
           fi
 
-      - name: Bump version if already published
+      - name: Bump version
         if: steps.gate.outputs.publish == 'true'
         run: |
-          LOCAL=$(node -p "require('./package.json').version")
-          if npm view "hyperliquid-coin-svgs@$LOCAL" version >/dev/null 2>&1; then
-            npm version patch --no-git-tag-version
-          fi
+          npm version patch --no-git-tag-version
           echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
-      # A valid NPM_KEY wins; otherwise publish via OIDC trusted publishing.
+      # npm Trusted Publishing created after 2026-09-03 allows `npm stage
+      # publish` by default; direct `npm publish` must be explicitly enabled on
+      # npmjs.com. Staging does not require 2FA — a maintainer approves later.
+      # Set the repository variable NPM_PUBLISH_MODE=direct once direct
+      # publishing is allowed.
       - name: Publish to npm
         id: publish
         if: steps.gate.outputs.publish == 'true'
         continue-on-error: true
         env:
           NPM_KEY: ${{ secrets.NPM_KEY }}
+          NPM_PUBLISH_MODE: ${{ vars.NPM_PUBLISH_MODE || 'stage' }}
         run: |
           AUTH_FILE="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           if [ -n "${NPM_KEY:-}" ]; then
             printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_KEY" > "$AUTH_FILE"
             if npm whoami >/dev/null 2>&1; then
               echo "Publishing with NPM_KEY"
-              npm publish
+              if [ "$NPM_PUBLISH_MODE" = "direct" ]; then npm publish; else npm stage publish; fi
               exit 0
             fi
             echo "::warning::NPM_KEY is invalid — falling back to OIDC."
           fi
           # OIDC requires that no token is configured anywhere.
           printf 'registry=https://registry.npmjs.org/\n' > "$AUTH_FILE"
-          echo "Publishing with OIDC trusted publishing"
-          npm publish --provenance
+          if [ "$NPM_PUBLISH_MODE" = "direct" ]; then
+            echo "Direct publish via OIDC"
+            npm publish --provenance
+          else
+            echo "Staged publish via OIDC (approval required on npmjs.com)"
+            npm stage publish --provenance
+          fi
 
       - name: Commit version and tag
         if: steps.publish.outcome == 'success'
         run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           git add package.json package-lock.json
-          git commit -m "chore: bump to v$VERSION [skip ci]"
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump to v$VERSION [skip ci]"
+          fi
           git tag "v$VERSION"
           git push origin main
           git push origin "v$VERSION"
+
+      - name: Explain how to finish a staged release
+        if: steps.publish.outcome == 'success' && vars.NPM_PUBLISH_MODE != 'direct'
+        run: |
+          echo "::notice title=Release staged::v$VERSION was staged. Approve it with 2FA on npmjs.com (Staged Packages) or run: npm stage list hyperliquid-coin-svgs && npm stage approve <stage-id>"
+          {
+            echo "### Release v$VERSION staged"
+            echo ""
+            echo "It is not installable yet. A maintainer must approve it with 2FA:"
+            echo "1. npmjs.com → Staged Packages → **Approve**, or"
+            echo "2. \`npm stage list hyperliquid-coin-svgs\` then \`npm stage approve <stage-id>\`"
+            echo ""
+            echo "To publish without this step, enable **Allow npm publish** on the"
+            echo "Trusted Publisher and set the repository variable \`NPM_PUBLISH_MODE=direct\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Warn when publishing is unavailable
         if: steps.publish.outcome == 'failure'
